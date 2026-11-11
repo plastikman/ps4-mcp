@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -29,7 +30,8 @@ from .hub import AppClient, state_from_json
 from .probe_runner import ConsoleError
 from .protocol import PadState
 
-HOST = os.environ.get("PS5_HOST")
+HOST = os.environ.get("PS4_HOST" if sys.platform.startswith("linux") else "PS5_HOST") or os.environ.get("PS5_HOST")
+LINUX_CHIAKI = sys.platform.startswith("linux") and os.environ.get("PS5MCP_BACKEND", "chiaki") == "chiaki"
 MAX_HOLD_MS = 10_000
 MAX_CLAIM_WAIT_S = 600
 HOME_METHOD = os.environ.get("PS5MCP_HOME_METHOD", "suspend")
@@ -52,7 +54,7 @@ class Runtime:
         self.title_uploads: dict[str, str] = {}
 
     def start(self) -> None:
-        self.capture = capture.NativeApp()
+        self.capture = capture.backend()
         with contextlib.suppress(capture.CaptureError, OSError):
             self.app()  # reported by status(); every tool retries
         if port := os.environ.get("PS5MCP_STREAM_PORT"):
@@ -64,10 +66,15 @@ class Runtime:
         """The connection to the app, launching or reconnecting to it when needed."""
         with self._lock:
             if self._app is None or self._app.closed:
-                self.capture.start(visible=os.environ.get("PS5MCP_VIEW") == "1", host=HOST)
-                client = AppClient(self.capture.socket, client=f"mcp-{os.getpid()}")
-                client.on("state", self._on_state)
-                client.subscribe("state")
+                if self.capture.__class__.__name__ == "LinuxChiakiApp":
+                    from .linux_chiaki import make_client
+                    self.capture.start(visible=True, host=HOST)
+                    client = make_client(self.capture)
+                else:
+                    self.capture.start(visible=os.environ.get("PS5MCP_VIEW") == "1", host=HOST)
+                    client = AppClient(self.capture.socket, client=f"mcp-{os.getpid()}")
+                    client.on("state", self._on_state)
+                    client.subscribe("state")
                 self._app = client
             return self._app
 
@@ -97,16 +104,21 @@ async def lifespan(_server) -> AsyncIterator[None]:
 
 
 mcp = MCPServer(
-    "ps5",
+    "ps4" if LINUX_CHIAKI else "ps5",
     instructions=(
-        "Controls a PS5 through a virtual DualSense and sees it through an HDMI capture card. "
-        "Call snapshot() to look before acting. Buttons: " + ", ".join(p.BUTTONS) + ". "
-        "Cross confirms, circle goes back. ps_button() opens the control center, and a one-second hold goes home; "
-        "home() suspends the running game. When Remote Play is the video source, type_text() fills text fields. "
-        "If a tool says a human has control, wait and retry. "
-        "The console is shared with other agents: call claim_console(reason) before a task so nobody interrupts "
-        "you, and release_console() when done. If a tool says the PS5 is in use, call claim_console(reason, "
-        "wait_s=...) to queue; it returns when the console is yours (call it again to keep waiting)."
+        ("Controls a PS4 through Chiaki-ng Remote Play on Linux. Call snapshot() before acting. "
+         "Buttons, holds, sequences, and digital stick directions are sent through Chiaki-ng's keyboard controller. "
+         "PS5 payload commands, game management, text entry, analog stick magnitude, and touch gestures are not "
+         "available in this backend."
+         if LINUX_CHIAKI else
+         "Controls a PS5 through a virtual DualSense and sees it through an HDMI capture card. "
+         "Call snapshot() to look before acting. Buttons: " + ", ".join(p.BUTTONS) + ". "
+         "Cross confirms, circle goes back. ps_button() opens the control center, and a one-second hold goes home; "
+         "home() suspends the running game. When Remote Play is the video source, type_text() fills text fields. "
+         "If a tool says a human has control, wait and retry. "
+         "The console is shared with other agents: call claim_console(reason) before a task so nobody interrupts "
+         "you, and release_console() when done. If a tool says the PS5 is in use, call claim_console(reason, "
+         "wait_s=...) to queue; it returns when the console is yours (call it again to keep waiting).")
     ),
     lifespan=lifespan,
 )
@@ -119,6 +131,9 @@ def _looking() -> None:
 
 def _frame(max_width: int | None) -> Image:
     _looking()
+    if hasattr(runtime.capture, "capture_frame"):
+        frame = runtime.capture.capture_frame(max_width=max_width)
+        return Image(data=frame.read_bytes(), format="jpeg")
     with tempfile.TemporaryDirectory() as scratch:
         path = capture.snapshot(Path(scratch) / "frame.jpg", max_width=max_width, daemon=runtime.capture)
         return Image(data=path.read_bytes(), format="jpeg")
@@ -132,7 +147,7 @@ async def _app() -> AppClient:
     try:
         return await asyncio.to_thread(runtime.app)
     except (capture.CaptureError, OSError) as exc:
-        raise PadError(f"PS5 app not available: {exc}") from exc
+        raise PadError(f"Remote Play backend not available: {exc}") from exc
 
 
 def _check_duration(ms: int) -> float:
@@ -709,7 +724,7 @@ async def status() -> dict:
     if link["connected"]:
         with contextlib.suppress(PadError):
             info["payload"]["pong"] = await asyncio.to_thread(app.ping)
-    info["capture"] = {"backend": "NativeApp", "running": True, "source": hub["source"],
+    info["capture"] = {"backend": "Chiaki-ng" if LINUX_CHIAKI else "NativeApp", "running": True, "source": hub["source"],
                        "frame_age_s": hub["frame_age"] if hub["frame_age"] >= 0 else None}
     if hub.get("remote_play"):
         info["capture"]["remote_play"] = hub["remote_play"]  # state, readiness, keyboard.open for type_text

@@ -26,9 +26,9 @@ struct RemotePlayStatus {
             return "Streaming · \(width) × \(height) · " + (audioReady ? "Audio receiving" : "Waiting for audio")
         case .stopped: return "Remote Play stopped."
         case .setupNeeded: return "Set up Remote Play to receive video and audio."
-        case .applyingAdmission: return "Preparing Remote Play for this PS5 session…"
+        case .applyingAdmission: return "Preparing Remote Play…"
         case .waitingForVideo: return "Connected; waiting for video…"
-        case .connecting: return "Connecting to PS5…"
+        case .connecting: return "Connecting to PS4…"
         case .reconnecting: return "Connection lost. Retrying…"
         case .unavailable: return "Remote Play unavailable."
         }

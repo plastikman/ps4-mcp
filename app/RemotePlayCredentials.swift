@@ -7,7 +7,7 @@ enum RemotePlayCredentialError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidAccount: return "Account ID must be Base64 encoding exactly eight bytes."
-        case .invalidPIN: return "Enter the eight-digit pairing PIN shown on the PS5."
+        case .invalidPIN: return "Enter the eight-digit Add Device PIN shown on the PS4."
         case .invalidRecord: return "Remote Play registration is invalid. Forget it and pair again."
         case .storage(let status): return "Could not access Remote Play credentials in Keychain (\(status))."
         }

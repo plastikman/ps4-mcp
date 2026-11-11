@@ -3,8 +3,25 @@ PYTHON ?= python3
 ENV := bash scripts/with-env.sh
 CC_PS5 = "$$PS5_PAYLOAD_SDK/bin/prospero-clang"
 
-.PHONY: FORCE all app install bootstrap remoteplay-deps remoteplay-setup payloads verify test lint check clean
+.PHONY: FORCE all linux linux-chiaki app install bootstrap remoteplay-deps remoteplay-setup payloads verify test lint check clean
+ifeq ($(shell uname -s),Linux)
+all: linux-chiaki
+else
 all: payloads verify app
+endif
+
+# Linux uses the pinned Chiaki-ng desktop client as its Remote Play endpoint.
+# It is also the interactive viewer and supplies keyboard-to-controller mapping.
+LINUX_CHIAKI := build/linux-chiaki/gui/chiaki
+linux: linux-chiaki
+linux-chiaki: third-party/chiaki-ng/CMakeLists.txt
+	git submodule update --init third-party/chiaki-ng
+	git -C third-party/chiaki-ng submodule update --init third-party/curl third-party/gf-complete third-party/jerasure third-party/nanopb third-party/cpp-steam-tools
+	cmake -S third-party/chiaki-ng -B build/linux-chiaki -G Ninja -DCMAKE_BUILD_TYPE=Release \
+		-DCHIAKI_ENABLE_GUI=ON -DCHIAKI_ENABLE_CLI=OFF -DCHIAKI_ENABLE_TESTS=OFF \
+		-DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF -DCHIAKI_ENABLE_SETSU=OFF -DCHIAKI_ENABLE_STEAM_SHORTCUT=OFF \
+		-DCHIAKI_USE_SYSTEM_CURL=OFF -DCHIAKI_ENABLE_FFMPEG_DECODER=ON
+	cmake --build build/linux-chiaki --parallel $${JOBS:-4}
 
 # The macOS hub app (capture card, padd link, local API): app/project.yml (XcodeGen) built with xcodebuild and
 # signed ad hoc by default (app/Configuration/Base.xcconfig). Sign with a team through DEVELOPMENT_TEAM=/APP_BUNDLE_ID=

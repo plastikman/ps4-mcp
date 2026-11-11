@@ -14,7 +14,7 @@ final class RemotePlaySetupWindow: NSObject, NSWindowDelegate {
     private let accounts = NSPopUpButton()
     private let accountID = NSTextField()
     private let pin = NSSecureTextField()
-    private let status = NSTextField(wrappingLabelWithString: "Check the console to choose an account, or use an existing account ID under Advanced.")
+    private let status = NSTextField(wrappingLabelWithString: "Enter your PSN account ID and the Pair Device PIN shown on the PS4.")
     private let accountStatus = NSTextField(wrappingLabelWithString: "No account inspected.")
     private var users: [RemotePlaySetupAccount] = []
     private var actions: [NSButton] = []
@@ -69,7 +69,8 @@ final class RemotePlaySetupWindow: NSObject, NSWindowDelegate {
         let prepare = button("Prepare Selected Account…", #selector(prepareAccount))
         prepareButton = prepare; prepare.isEnabled = false
         accountID.placeholderString = "Base64 account ID (8 bytes)"
-        pin.placeholderString = "Eight-digit PIN from Pair Device"
+        accountID.stringValue = "b2xsb3BhZys="
+        pin.placeholderString = "Eight-digit PIN from Add Device"
         // Placeholders vanish once filled, so VoiceOver needs real labels.
         accounts.setAccessibilityLabel("Account")
         accountID.setAccessibilityLabel("Account ID")
@@ -83,25 +84,22 @@ final class RemotePlaySetupWindow: NSObject, NSWindowDelegate {
         }
         let divider = NSBox(); divider.boxType = .separator
         let cancel = NSButton(title: "Close", target: self, action: #selector(close))
-        let advanced = NSButton(checkboxWithTitle: "Advanced: enter an existing account ID", target: self, action: #selector(toggleAdvanced(_:)))
         let accountRow = row([text("Account ID:"), accountID])
-        accountRow.isHidden = true; advancedViews = [accountRow]
         retryVerification.target = self; retryVerification.action = #selector(retryCapture)
         retryVerification.isEnabled = false
         let content = NSStackView(views: [
-            text("Target PS5: \(host)", bold: true),
-            text("1. Choose an account", bold: true),
-            text("Keep the PS5 on and Payload Manager available. The helper inspects local users without changing them. Preparation needs your separate confirmation and creates a console backup before changing the selected user."),
-            helperButtons, accounts, accountStatus, prepare,
+            text("Target PS4: \(host)", bold: true),
+            text("1. Enable Remote Play on the PS4", bold: true),
+            text("On the console, open Settings → Remote Play Connection Settings and enable Remote Play. Then choose Add Device to display a temporary eight-digit PIN."),
             divider,
-            text("2. Prepare and pair", bold: true),
-            text("Sign into the selected local user on the PS5. Open Settings → System → Remote Play, enable Remote Play, then choose Pair Device. Enter its eight-digit PIN here before it expires. An offline user can use the account ID produced above; an existing registration can use a manually entered Base64 account ID."),
-            advanced, accountRow,
+            text("2. Pair this PS4", bold: true),
+            text("Enter the Base64 PSN account ID (exactly eight decoded bytes) and the PIN before it expires. Pairing saves the registration securely in this Mac's Keychain."),
+            accountRow,
             row([text("Pairing PIN:"), pin]),
             row([button("Pair & Use Remote Play", #selector(pair)), cancel]),
             status,
             text("3. Verify capture", bold: true),
-            text("On the supported offline console, the app may apply a temporary Remote Play fix after the PS5 restarts. Payload Manager must be available."),
+            text("Keep the PS4 awake and signed into the account used for pairing while verification runs."),
             verificationStatus, retryVerification,
         ])
         content.orientation = .vertical; content.alignment = .leading; content.spacing = 12
@@ -246,7 +244,7 @@ final class RemotePlaySetupWindow: NSObject, NSWindowDelegate {
         do {
             try authorize()
             let account = try RemotePlayCredentials.parseAccountID(accountID.stringValue)
-            guard account.contains(where: { $0 != 0 }) else { throw RemotePlaySetupError("Prepare the selected offline account or enter an existing nonzero account ID.") }
+            guard account.contains(where: { $0 != 0 }) else { throw RemotePlaySetupError("Enter the nonzero PSN account ID used by the PS4 user.") }
             let pinText = pin.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
             _ = try RemotePlayCredentials.parsePIN(pinText)
             generation &+= 1
@@ -280,7 +278,7 @@ final class RemotePlaySetupWindow: NSObject, NSWindowDelegate {
                         self.announce(self.status.stringValue)
                         self.beginVerification()
                     } catch {
-                        self.status.stringValue = error.localizedDescription + " If pairing failed or the PIN expired, obtain a fresh Pair Device PIN and try Pair again. Account preparation is never repeated automatically."
+                        self.status.stringValue = error.localizedDescription + " If pairing failed or the PIN expired, obtain a fresh Add Device PIN and try again."
                         self.announce(self.status.stringValue)
                     }
                 }

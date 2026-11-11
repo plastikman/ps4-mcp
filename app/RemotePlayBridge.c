@@ -45,7 +45,9 @@ RPRegistration *rp_registration_create(const char *host, const uint8_t account_i
     RPRegistration *r = calloc(1, sizeof(*r));
     if(!r) { if(error) *error=CHIAKI_ERR_MEMORY; return NULL; }
     quiet_log(&r->log); r->callback=callback; r->user=user;
-    ChiakiRegistInfo info = { .target=CHIAKI_TARGET_PS5_1, .host=host, .pin=pin, .broadcast=false };
+    /* The fork targets PS4. PS4 firmware version is negotiated by Chiaki after
+     * registration; PS4_10 selects the modern registration endpoint. */
+    ChiakiRegistInfo info = { .target=CHIAKI_TARGET_PS4_10, .host=host, .pin=pin, .broadcast=false };
     memcpy(info.psn_account_id, account_id, 8);
     int err = chiaki_regist_start(&r->native, &r->log, &info, registration_event, r);
     wipe(&info, sizeof(info));
@@ -62,7 +64,7 @@ static int verify_identity(const char *host, const uint8_t expected[6], RPCallba
     int fd=socket(address->ai_family, SOCK_DGRAM, 0), result=RP_ERROR_TIMEOUT;
     if(fd < 0 || connect(fd,address->ai_addr,address->ai_addrlen)) { if(fd>=0) close(fd); freeaddrinfo(address); return CHIAKI_ERR_NETWORK; }
     freeaddrinfo(address);
-    const char request[]="SRCH * HTTP/1.1\ndevice-discovery-protocol-version:00030010\n";
+    const char request[]="SRCH * HTTP/1.1\ndevice-discovery-protocol-version:00020020\n";
     if(send(fd,request,sizeof(request)-1,0)<0) { close(fd); return CHIAKI_ERR_NETWORK; }
     for(int attempt=0; attempt<30; attempt++) {
         if(cb.cancelled && cb.cancelled(user)) { result=RP_ERROR_CANCELED; break; }
@@ -73,12 +75,12 @@ static int verify_identity(const char *host, const uint8_t expected[6], RPCallba
         char response[2048]; ssize_t length=recv(fd,response,sizeof(response)-1,0);
         if(length<=0) { result=CHIAKI_ERR_NETWORK; break; }
         response[length]=0;
-        bool ps5=false, identity=false, duplicate=false;
+        bool ps4=false, identity=false, duplicate=false;
         char *cursor=response, *line=strsep(&cursor,"\n");
         if(!line || (strncmp(line,"HTTP/1.1 200 ",13) && strncmp(line,"HTTP/1.1 620 ",13))) { result=RP_ERROR_IDENTITY; break; }
         while((line=strsep(&cursor,"\n"))) {
             size_t len=strlen(line); if(len && line[len-1]=='\r') line[--len]=0;
-            if(!strncmp(line,"host-type:",10)) ps5=!strcmp(line+10,"PS5");
+            if(!strncmp(line,"host-type:",10)) ps4=!strcmp(line+10,"PS4");
             if(!strncmp(line,"host-id:",8)) {
                 if(identity) duplicate=true;
                 const char *hex=line+8; uint8_t mac[6];
@@ -89,7 +91,7 @@ static int verify_identity(const char *host, const uint8_t expected[6], RPCallba
                 if(!identity) duplicate=true;
             }
         }
-        result=ps5 && identity && !duplicate ? 0 : RP_ERROR_IDENTITY; break;
+        result=ps4 && identity && !duplicate ? 0 : RP_ERROR_IDENTITY; break;
     }
     close(fd); return result;
 }
@@ -147,7 +149,7 @@ RPSession *rp_session_create(const char *host, const uint8_t mac[6], const uint8
     if(init_error) { if(error) *error=init_error; return NULL; }
     RPSession *s=calloc(1,sizeof(*s)); if(!s) { if(error) *error=CHIAKI_ERR_MEMORY; return NULL; }
     quiet_log(&s->log); s->callbacks=callbacks; s->user=user;
-    ChiakiConnectInfo info={.ps5=true,.host=host,.enable_idr_on_fec_failure=true,.packet_loss_max=0.05,.enable_keyboard=enable_keyboard};
+    ChiakiConnectInfo info={.ps5=false,.host=host,.enable_idr_on_fec_failure=true,.packet_loss_max=0.05,.enable_keyboard=enable_keyboard};
     info.video_profile=(ChiakiConnectVideoProfile){.width=1920,.height=1080,.max_fps=60,.bitrate=15000,.codec=CHIAKI_CODEC_H264};
     memcpy(info.regist_key,registration_key,16); memcpy(info.morning,rp_key,16);
     err=chiaki_session_init(&s->native,&info,&s->log); wipe(&info,sizeof(info));

@@ -5,6 +5,17 @@ input still uses `padd`, except the on-screen keyboard (below); the
 capture card, file, and synthetic sources remain available. The initial profile is SDR H.264 at 1080p60. Decoded frames are always
 1920×1080 BGRA for snapshots, visual waits, and assignment detection.
 
+## PS4 fork status
+
+This fork now selects Chiaki-ng's PS4 registration/session protocol and PS4
+discovery identity. Pairing is manual: enable Remote Play in Settings → Remote
+Play Connection Settings, choose Add Device, and enter the eight-digit PIN and
+Base64 PSN account ID in the setup window. The account ID field is prefilled
+with `b2xsb3BhZys=` for the supplied ID. PS4 support has not yet been built or
+validated against a console. The rest of this app still depends on the PS5
+`padd` payload; PS4 gameplay controller forwarding and PS4 MCP console commands
+are not implemented by this change.
+
 ## Validation status
 
 The app streams real 1920×1080 video and audio on firmware 13.60 with the existing

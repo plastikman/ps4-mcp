@@ -17,6 +17,7 @@ import re
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -358,6 +359,9 @@ class NativeApp:
 
 def backend(root: Path | None = None) -> Daemon | NativeApp:
     """The native app when built, unless PS5MCP_CAPTURE=ffmpeg; whichever is already running wins."""
+    if sys.platform.startswith("linux") and os.environ.get("PS5MCP_BACKEND", "chiaki") == "chiaki":
+        from .linux_chiaki import LinuxChiakiApp
+        return LinuxChiakiApp(root)
     native, ffmpeg = NativeApp(root), Daemon(root)
     if native.status() is not None:
         return native
@@ -390,6 +394,9 @@ def snapshot(destination: Path, max_width: int | None = None, daemon: Daemon | N
     daemon = daemon or backend()
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if hasattr(daemon, "capture_frame"):
+        shutil.copyfile(daemon.capture_frame(max_width=max_width), destination)
+        return destination
     with tempfile.TemporaryDirectory() as scratch:
         if daemon.pid() is not None:
             age = daemon.frame_age()

@@ -35,7 +35,6 @@ final class RemotePlaySource: FrameSource {
     private var lastVideo = 0.0
     private var statusValue = RemotePlayStatus()
     private let admission: RemotePlayAdmissionServicing
-    private var admissionAttempted = false
     private let enableKeyboard: Bool
     /// Chiaki's quit reason for the console's "Remote Play crashed" refusal (application reason 0x80108b15).
     static let remotePlayCrashedReason = 5
@@ -123,8 +122,7 @@ final class RemotePlaySource: FrameSource {
         queue.async {
             guard !self.running else { return }
             self.running = true
-            self.admissionAttempted = false
-            self.lock.lock(); self.statusValue.admission = "not_attempted"; self.lock.unlock()
+            self.lock.lock(); self.statusValue.admission = "not_applicable"; self.lock.unlock()
             self.connect()
             let timer = DispatchSource.makeTimerSource(queue: self.queue)
             timer.schedule(deadline: .now() + 1, repeating: 1)
@@ -167,26 +165,16 @@ final class RemotePlaySource: FrameSource {
                     self.lastVideo = uptimeSeconds()
                     self.publish("waiting_for_video", issue: "Connected; waiting for video…")
                 case .disconnected(let reason):
-                    if reason == RemotePlayAdmission.sessionRequestUnknownReason {
-                        if self.admissionAttempted {
-                            self.disconnect("The PS5 is not ready for another Remote Play session. Retrying…", retry: true)
-                        } else {
-                            self.admissionAttempted = true
-                            self.disconnect("Preparing Remote Play for this PS5 session…", retry: true, applyAdmission: true)
-                        }
-                        return
-                    }
                     if reason == Self.remotePlayCrashedReason {
                         // 0x80108b15: seen after the service restarted overnight on 13.60, with Remote Play turned
                         // off in Settings. Retrying cannot help; a restarted service has lost the admission patch.
-                        self.disconnect("The PS5 refused Remote Play (service crashed or turned off). Check Settings → "
-                                        + "System → Remote Play → Enable Remote Play; if it is on, restart the PS5, "
-                                        + "reload the jailbreak and Payload Manager, then reconnect.", retry: false)
+                        self.disconnect("The PS4 refused Remote Play. Check Settings → Remote Play Connection Settings "
+                                        + "and enable Remote Play, then restart the console and reconnect.", retry: false)
                         return
                     }
                     self.disconnect("Remote Play disconnected (\(reason)). Reconnecting…", retry: true)
                 case .loginPINNeeded:
-                    self.disconnect("The PS5 requires its user login passcode. Sign in on the TV, then restart capture.", retry: false)
+                    self.disconnect("The PS4 requires its user login passcode. Sign in on the TV, then restart capture.", retry: false)
                 case .failed(let error):
                     // Wrong console/invalid credentials need an explicit repair, never account activation.
                     self.disconnect(error.localizedDescription, retry: error.code != Int(RP_ERROR_IDENTITY)

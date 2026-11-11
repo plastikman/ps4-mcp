@@ -5,7 +5,8 @@
 # PS5 MCP
 
 See and control a jailbroken PS5 from an MCP agent or your keyboard, with live video and audio.
-**macOS only for now,** Windows and Linux support is planned.
+macOS is the established backend. An experimental Linux backend uses Chiaki-ng
+for PS4 Remote Play; see [Linux PS4 Remote Play](docs/linux-ps4.md).
 
 <p align="center">
   <img src="assets/screenshots/app.png" width="1000" alt="The PS5 MCP app: live video of the Playden library on the PS5, next to a sidebar with capture, console, launch and controller controls">
