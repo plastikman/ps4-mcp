@@ -27,10 +27,12 @@ BUTTON_KEYS = {
     0x000002: "5",             # L3
     0x000004: "6",             # R3
     0x000008: "o",             # Options
-    0x000010: "Left",
+    # protocol.BUTTONS: 0x10 up, 0x20 right, 0x40 down, 0x80 left. Up and left were
+    # transposed here, so press("up") went left and press("left") went up.
+    0x000010: "Up",
     0x000020: "Right",
     0x000040: "Down",
-    0x000080: "Up",
+    0x000080: "Left",
     0x000100: "1",             # L2
     0x000200: "4",             # R2
     0x000400: "2",             # L1
@@ -219,7 +221,14 @@ class LinuxChiakiApp:
 
     def show(self) -> None:
         window = self._window()
-        _run(["xdotool", "windowraise", str(window), "windowfocus", "--sync", str(window)], env=self.env)
+        # windowactivate asks the window manager (_NET_ACTIVE_WINDOW); windowfocus sets X input
+        # focus directly, which Mutter's Xwayland ignores, so keys went to whatever the compositor
+        # considered focused and the console saw no input at all. Keep windowfocus as the fallback
+        # for plain X11 sessions without a window manager that answers the activate request.
+        _run(["xdotool", "windowraise", str(window)], env=self.env)
+        activated = _run(["xdotool", "windowactivate", "--sync", str(window)], env=self.env)
+        if activated.returncode != 0:
+            _run(["xdotool", "windowfocus", "--sync", str(window)], env=self.env)
 
 
 class LinuxChiakiClient:
